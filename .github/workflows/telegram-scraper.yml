@@ -2,43 +2,67 @@ name: Telegram Channel Scraper
 
 on:
   schedule:
-    # هر 6 ساعت یکبار اجرا شود
     - cron: '0 */6 * * *'
-  workflow_dispatch:  # اجازه اجرای دستی از داخل گیت‌هاب
+  workflow_dispatch:
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 👈 مهم: دسترسی نوشتن رو فعال می‌کنه
     
     steps:
       - name: 📥 دریافت کدهای مخزن
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true  # 👈 مهم: توکن رو نگه می‌داره
+          fetch-depth: 0  # کل تاریخچه رو میاره
       
       - name: 🐍 نصب پایتون
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
       
-      - name: 📦 نصب کتابخانه‌های مورد نیاز
+      - name: 📦 نصب کتابخانه‌ها
         run: |
-          pip install -r requirements.txt
+          pip install telegram-channel-viewer requests beautifulsoup4
       
-      - name: 🚀 اجرای اسکریپت اسکرپینگ
+      - name: 🚀 اجرای اسکریپت
+        id: scrape
+        continue-on-error: true
         run: python scraper.py
         env:
-          TELEGRAM_CHANNEL: ${{ vars.TELEGRAM_CHANNEL }}  # استفاده از Variable (اختیاری)
+          TELEGRAM_CHANNEL: ${{ vars.TELEGRAM_CHANNEL }}
       
-      - name: 💾 ذخیره خروجی به عنوان Artifact
+      - name: 💾 ذخیره Artifact (همیشه اجرا شود)
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: telegram-data
           path: output.json
           retention-days: 7
       
-      - name: 📤 commit و push به مخزن (اختیاری)
+      - name: 📤 کامیت و پوش به مخزن
+        if: success()  # فقط اسکریپت موفق باشه
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add output.json
-          git diff --quiet && git diff --staged --quiet || git commit -m "🤖 به‌روزرسانی خودکار: $(date +'%Y-%m-%d %H:%M:%S')"
-          git push
+          # بررسی وجود فایل output.json
+          if [ -f "output.json" ]; then
+            # تنظیم کاربر گیت
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            
+            # اضافه کردن فایل
+            git add output.json
+            
+            # بررسی اینکه تغییر وجود دارد یا نه
+            if git diff --staged --quiet; then
+              echo "✅ هیچ تغییری وجود ندارد - نیازی به کامیت نیست"
+            else
+              echo "🔄 تغییر یافت - در حال کامیت و پوش..."
+              git commit -m "🤖 به‌روزرسانی خودکار: $(date -u '+%Y-%m-%d %H:%M:%S') UTC"
+              git push
+              echo "✅ پوش انجام شد"
+            fi
+          else
+            echo "⚠️ فایل output.json پیدا نشد"
+          fi
