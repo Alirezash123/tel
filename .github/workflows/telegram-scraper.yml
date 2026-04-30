@@ -1,0 +1,44 @@
+name: Telegram Channel Scraper
+
+on:
+  schedule:
+    # هر 6 ساعت یکبار اجرا شود
+    - cron: '0 */6 * * *'
+  workflow_dispatch:  # اجازه اجرای دستی از داخل گیت‌هاب
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 دریافت کدهای مخزن
+        uses: actions/checkout@v4
+      
+      - name: 🐍 نصب پایتون
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: 📦 نصب کتابخانه‌های مورد نیاز
+        run: |
+          pip install -r requirements.txt
+      
+      - name: 🚀 اجرای اسکریپت اسکرپینگ
+        run: python scraper.py
+        env:
+          TELEGRAM_CHANNEL: ${{ vars.TELEGRAM_CHANNEL }}  # استفاده از Variable (اختیاری)
+      
+      - name: 💾 ذخیره خروجی به عنوان Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-data
+          path: output.json
+          retention-days: 7
+      
+      - name: 📤 commit و push به مخزن (اختیاری)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add output.json
+          git diff --quiet && git diff --staged --quiet || git commit -m "🤖 به‌روزرسانی خودکار: $(date +'%Y-%m-%d %H:%M:%S')"
+          git push
